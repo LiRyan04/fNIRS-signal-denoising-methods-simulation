@@ -1,10 +1,10 @@
-# fNIRs-denoising-simulation
+# fNIRs-signal-denoise-simulation
 Different fNIRs signal denoising techniques simulation
 
 ## Tool:
 - [MNE-NIRS](https://mne.tools/mne-nirs/stable/index.html)
 
-## Result:
+## Results:
 <table>
   <thead>
     <tr>
