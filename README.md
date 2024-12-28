@@ -1,9 +1,14 @@
 # fNIRs-signal-denoise-simulation
 __Different fNIRs signal denoising techniques simulation__  
-We applied the method to the examples code form the tool, in order to compare the simulation efficiency and effectiveness.
+We applied different methods to the examples code using the tool, in order to compare the simulation efficiency and effectiveness.
+
+## Data:
+- [mne.fnirs.data](https://mne.tools/stable/generated/mne.datasets.fnirs_motor.data_path.html)
+- [mne.nirs.examples](https://mne.tools/mne-nirs/stable/auto_examples/general/index.html)
 
 ## Tool:
 - [MNE-NIRS](https://mne.tools/mne-nirs/stable/index.html)
+- [Matplotlib](https://matplotlib.org)
 
 ## Results:
 <table>
