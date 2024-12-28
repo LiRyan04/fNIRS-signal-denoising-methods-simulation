@@ -12,8 +12,7 @@ We applied different methods to the examples code using the tool, in order to co
 - [matplotlib](https://matplotlib.org)
 
 ## Environment:
-- Python 3.12
-- anaconda
+- Python 3.12 (anaconda)
 - MNE 1.80
 - matplotlib 3.10.0
 
