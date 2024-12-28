@@ -7,8 +7,15 @@ We applied different methods to the examples code using the tool, in order to co
 - [mne.nirs.examples](https://mne.tools/mne-nirs/stable/auto_examples/general/index.html)
 
 ## Tool:
+- [MNE](https://mne.tools/)
 - [MNE-NIRS](https://mne.tools/mne-nirs/stable/index.html)
-- [Matplotlib](https://matplotlib.org)
+- [matplotlib](https://matplotlib.org)
+
+## Environment:
+- Python 3.12
+- anaconda
+- MNE 1.80
+- matplotlib 3.10.0
 
 ## Results:
 <table>
