@@ -1,3 +1,4 @@
+import time
 import os
 import matplotlib.pyplot as plt  # 导入 matplotlib.pyplot
 import mne
@@ -5,10 +6,14 @@ from mne.preprocessing.nirs import (
     optical_density,
     temporal_derivative_distribution_repair,
 )
+start_time = time.time()
 
+# 你的代码
+for i in range(1000000):
+    pass
 # Import data
 # -----------
-plt.rcParams['font.family'] = 'Times New Roman'
+
 # 加载 fNIRS 数据
 fnirs_data_folder = mne.datasets.fnirs_motor.data_path()
 fnirs_cw_amplitude_dir = os.path.join(fnirs_data_folder, "Participant-1")
@@ -45,7 +50,12 @@ data = raw_od_multi_channel.get_data()
 time_points = raw_od_multi_channel.times  # 获取时间点
 max_value = data.max()
 min_value = data.min()
+# 记录程序结束的时间
+end_time = time.time()
 
+# 计算并输出程序运行时间
+elapsed_time = end_time - start_time
+print(f"程序运行时间: {elapsed_time} 秒")
 # 绘制原始数据的图像（包含两个波长的通道）
 plt.figure(figsize=(10, 6))  # 设置图片大小
 plt.plot(time_points, data[0, :], label="760 nm")  # 绘制 760 nm 的数据
@@ -96,7 +106,7 @@ plt.legend()
 # 调整横纵坐标范围
 plt.xlim([time_points[0], time_points[-1]])  # 设置横坐标范围
 plt.ylim([min_value_corrupted - 0.1, max_value_corrupted + 0.1])  # 设置纵坐标范围，并加一些间距
-plt.savefig('/Users/run/Desktop/DSP_Project/SB/fg11.pdf', format='pdf')
+
 plt.show()  # 显示图像
 
 # 使用时间导数分布修复来处理伪影
@@ -108,7 +118,7 @@ max_value_corrected = corrected_data.max()
 min_value_corrected = corrected_data.min()
 
 # 绘制修复后的数据图像（包含两个波长的通道）
-plt.figure(figsize=(12, 8))  # 设置图片大小
+plt.figure(figsize=(10, 6))  # 设置图片大小
 plt.plot(time_points, corrected_data[0, :], label="760 nm")  # 绘制 760 nm 的数据
 plt.plot(time_points, corrected_data[1, :], label="850 nm")  # 绘制 850 nm 的数据
 plt.title("Corrected Data")

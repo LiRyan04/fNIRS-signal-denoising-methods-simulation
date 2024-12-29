@@ -1,110 +1,116 @@
 import os
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import mne
 from mne.preprocessing.nirs import optical_density
 from scipy.signal import savgol_filter
 from sklearn.metrics import mean_squared_error
+start_time = time.time()
 
-plt.rcParams['font.family'] = 'Times New Roman'
-
-# Load fNIRS data
+# 你的代码
+for i in range(1000000):
+    pass
+# 读取 fNIRS 数据
 fnirs_data_folder = mne.datasets.fnirs_motor.data_path()
 fnirs_raw_dir = os.path.join(fnirs_data_folder, "Participant-1")
 raw_intensity = mne.io.read_raw_nirx(fnirs_raw_dir).load_data().resample(3, npad="auto")
 
-# Convert signal to optical density
+# 将信号转换为光密度
 raw_od = optical_density(raw_intensity)
 
-# Simulate corrupted data (e.g., with artifacts)
-corrupted_data = raw_od.get_data()  # Get raw data
-corrupted_data[:, 298:302] = corrupted_data[:, 298:302] - 0.06  # Add spike artifact
-corrupted_data[:, 450:750] = corrupted_data[:, 450:750] + 0.03  # Add baseline drift
+# 示例：给信号添加伪影
+corrupted_data = raw_od.get_data()  # 获取原始数据
+corrupted_data[:, 298:302] = corrupted_data[:, 298:302] - 0.06  # 添加尖峰伪影
+corrupted_data[:, 450:750] = corrupted_data[:, 450:750] + 0.03  # 添加基线漂移
 
-# Create a new RawArray with corrupted data
+# 创建带有伪影的新RawArray
 corrupted_od = mne.io.RawArray(corrupted_data, raw_od.info, first_samp=raw_od.first_samp)
+
 
 # Savitzky-Golay Filter Function
 def apply_sg_filter(data, window_length=51, polyorder=3):
-    """Apply the Savitzky-Golay filter to smooth the signal."""
+    """
+    Apply the Savitzky-Golay filter to smooth the signal.
+    """
     return savgol_filter(data, window_length, polyorder, axis=1)
+
 
 # Apply the filter to the corrupted data
 window_length = 51  # Window length (must be odd)
 polyorder = 3  # Polynomial order
 smoothed_data = apply_sg_filter(corrupted_data, window_length, polyorder)
+# 记录程序结束的时间
+end_time = time.time()
+
+# 计算并输出程序运行时间
+elapsed_time = end_time - start_time
+print(f"程序运行时间: {elapsed_time} 秒")
 
 # Function to calculate Signal-to-Noise Ratio (SNR)
 def calculate_snr(original_signal, filtered_signal):
-    """Calculate the Signal-to-Noise Ratio (SNR)."""
+    """
+    Calculate the Signal-to-Noise Ratio (SNR).
+    """
     signal_variance = np.var(original_signal)
     noise_variance = np.var(original_signal - filtered_signal)
     snr = signal_variance / noise_variance
     return snr
 
+
 # Function to calculate Mean Squared Error (MSE)
 def calculate_mse(original_signal, filtered_signal):
-    """Calculate the Mean Squared Error (MSE) between original and filtered signals."""
+    """
+    Calculate the Mean Squared Error (MSE) between original and filtered signals.
+    """
     mse = mean_squared_error(original_signal, filtered_signal)
     return mse
 
-# Calculate SNR and MSE for the first channel 
+
+# Function to calculate Contrast-to-Noise Ratio (CNR)
+def calculate_cnr(original_signal, filtered_signal, noise_window=50):
+    """
+    Calculate the Contrast-to-Noise Ratio (CNR).
+    """
+    # Calculate the signal contrast (mean of the signal part)
+    signal_part = original_signal
+    signal_contrast = np.mean(signal_part)
+
+    # Estimate noise as the difference between original and filtered signals
+    noise = original_signal - filtered_signal
+    noise_std = np.std(noise[-noise_window:])  # Noise standard deviation in the last part (adjustable)
+
+    cnr = signal_contrast / noise_std
+    return cnr
+
+
+# Calculate SNR, MSE, and CNR for the first channel
 snr_value = calculate_snr(corrupted_data[0], smoothed_data[0])
 mse_value = calculate_mse(corrupted_data[0], smoothed_data[0])
+cnr_value = calculate_cnr(corrupted_data[0], smoothed_data[0])
 
 print(f"Signal-to-Noise Ratio (SNR): {snr_value:.4f}")
 print(f"Mean Squared Error (MSE): {mse_value:.4f}")
+print(f"Contrast-to-Noise Ratio (CNR): {cnr_value:.4f}")
 
-# Function to plot signals
-def plot_signals(raw_data, filtered_data):
-    """Plot raw and filtered signals."""
-    plt.figure(figsize=(12, 8))
 
-    # Raw (corrupted) data
+# Visualize the results (raw vs. filtered signal)
+def plot_signals(raw_data, filtered_data, title):
+    plt.figure(figsize=(10, 6))
     plt.subplot(2, 1, 1)
-    plt.plot(raw_data, label="Corrupted Signal", color='red', linewidth=1.5)
-    plt.axvspan(298, 302, color='gray', alpha=0.5, label='Spike Artifact', linewidth=1)
-    plt.axvspan(450, 750, color='yellow', alpha=0.3, label='Baseline Drift', linewidth=1)
-    plt.title("Raw fNIRS Data (with Artifacts)")
-    plt.xlabel("Samples")
-    plt.ylabel("Optical Density (OD)")
-    plt.legend()
+    plt.plot(raw_data)
+    plt.title("Raw Signal with Artifacts")
+    plt.xlabel("Time")
+    plt.ylabel("Amplitude")
 
-    # Smoothing (filtered) data
     plt.subplot(2, 1, 2)
-    plt.plot(filtered_data, label="Filtered Signal", linewidth=1.5)
-    plt.title("Filtered fNIRS Data (Savitzky-Golay)")
-    plt.xlabel("Samples")
-    plt.ylabel("Optical Density (OD)")
-
-
-
+    plt.plot(filtered_data)
+    plt.title(f"{title} - Processed Signal")
+    plt.xlabel("Time")
+    plt.ylabel("Amplitude")
     plt.tight_layout()
     plt.show()
 
+
 # Plot the original and filtered signals for comparison
-plot_signals(corrupted_data[0], smoothed_data[0])
-
-# Calculate and print the SNR and MSE for all channels
-snr_values = []
-mse_values = []
-for i in range(corrupted_data.shape[0]):  # Loop over channels
-    snr_values.append(calculate_snr(corrupted_data[i], smoothed_data[i]))
-    mse_values.append(calculate_mse(corrupted_data[i], smoothed_data[i]))
-
-print(f"Average SNR: {np.mean(snr_values):.4f}")
-print(f"Average MSE: {np.mean(mse_values):.4f}")
-
-# Function to calculate Contrast-to-Noise Ratio (CNR)
-def calculate_cnr(original_signal, filtered_signal):
-    """Calculate the Contrast-to-Noise Ratio (CNR)."""
-    active_signal = original_signal[300:350]  # Example range for "active" signal
-    baseline_signal = original_signal[0:50]  # Example range for baseline 
-    contrast = np.mean(active_signal) - np.mean(baseline_signal)
-    noise = np.std(original_signal - filtered_signal)
-    cnr = np.abs(contrast) / noise
-    return cnr
-
-# Calculate CNR for the first channel
-cnr_value = calculate_cnr(corrupted_data[0], smoothed_data[0])
-print(f"Contrast-to-Noise Ratio (CNR): {cnr_value:.4f}")
+plot_signals(corrupted_data[0], smoothed_data[0], "Savitzky-Golay Filter")
