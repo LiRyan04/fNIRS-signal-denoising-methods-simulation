@@ -6,15 +6,15 @@ We applied different methods to the examples code using the tool, in order to co
 - [mne.fnirs.data](https://mne.tools/stable/generated/mne.datasets.fnirs_motor.data_path.html)
 - [mne.nirs.examples](https://mne.tools/mne-nirs/stable/auto_examples/general/index.html)
 
-## Tool:
+## Tools:
 - [MNE](https://mne.tools/)
 - [MNE-NIRS](https://mne.tools/mne-nirs/stable/index.html)
-- [matplotlib](https://matplotlib.org)
+- [Matplotlib](https://matplotlib.org)
 
 ## Environment:
 - Python 3.12 (anaconda)
 - MNE 1.80
-- matplotlib 3.10.0
+- Matplotlib 3.10.0
 
 ## Results:
 <table>
