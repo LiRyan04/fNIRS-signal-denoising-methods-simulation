@@ -1,5 +1,5 @@
-# fNIRs-signal-denoising-methods-simulation
-__Different fNIRs signal denoising techniques simulation__  
+# fNIRS-signal-denoising-methods-simulation
+__Different fNIRS signal denoising techniques simulation__  
 We applied different methods to the examples code using the tool, in order to compare the simulation efficiency and effectiveness.
 
 ## Data:
