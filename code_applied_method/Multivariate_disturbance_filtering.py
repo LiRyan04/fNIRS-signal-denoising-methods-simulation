@@ -3,6 +3,11 @@ import mne
 import os
 import matplotlib.pyplot as plt
 import time
+start_time = time.time()
+
+# 你的代码
+for i in range(1000000):
+    pass
 
 # Multivariate disturbance filtering function
 def multivariate_disturbance_filtering(corrupted_data):
@@ -126,6 +131,13 @@ y_max = max(np.max(raw_od[0, :]), np.max(corrupted_data[0, :]), np.max(filtered_
 fs = raw_intensity.info['sfreq']  # Sampling frequency
 time_axis = np.arange(raw_od.shape[1]) / fs
 
+# 记录程序结束的时间
+end_time = time.time()
+
+# 计算并输出程序运行时间
+elapsed_time = end_time - start_time
+print(f"程序运行时间: {elapsed_time} 秒")
+
 # Plot raw, corrupted, and filtered data
 plt.figure(figsize=(12, 10))
 
@@ -161,10 +173,12 @@ plt.xlim([time_axis[0], time_axis[-1]])
 plt.ylim([y_min, y_max])
 
 plt.tight_layout()
+plt.savefig("fnirs_denoising_mdf_baseline_shift_changes_final.png")
 plt.show()
 
 
 # Calculate SNR, SME, and CNR
+
 
 # SNR (Signal-to-Noise Ratio) - Compare the signal power and noise power
 signal_power = np.mean(raw_od ** 2)  # Power of the raw signal
@@ -182,15 +196,3 @@ CNR = 10 * np.log10(signal_contrast / noise_power)
 print(f"SNR (Signal-to-Noise Ratio): {SNR:.2f} dB")
 print(f"SME (Signal-to-Mean Error): {sme:.5f}")
 print(f"CNR (Contrast-to-Noise Ratio): {CNR:.2f} dB")
-start_time = time.time()
-
-# 你的代码
-for i in range(1000000):
-    pass
-
-# 记录程序结束的时间
-end_time = time.time()
-
-# 计算并输出程序运行时间
-elapsed_time = end_time - start_time
-print(f"程序运行时间: {elapsed_time} 秒")
