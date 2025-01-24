@@ -1,198 +1,176 @@
-import numpy as np
-import mne
 import os
+import numpy as np
 import matplotlib.pyplot as plt
-import time
-start_time = time.time()
+import mne
+from scipy.optimize import minimize
+from scipy.signal import lfilter
+from scipy.ndimage import gaussian_filter1d
+from mne.preprocessing.nirs import optical_density
 
-# 你的代码
-for i in range(1000000):
-    pass
-
-# Multivariate disturbance filtering function
-def multivariate_disturbance_filtering(corrupted_data):
-    """
-    Apply multivariate disturbance filtering to correct specific artifact regions.
-    """
-    n_channels, n_samples = corrupted_data.shape
-    filtered_data = corrupted_data.copy()
-
-    for i in range(n_channels):
-        # Mark artifact regions (spike artifact and baseline drift)
-        artifact_indices = np.zeros(n_samples, dtype=bool)
-        artifact_indices[350:550] = True  # Baseline drift region
-
-        # Filter artifact regions
-        data_to_filter = corrupted_data[i, artifact_indices]
-        clean_region = corrupted_data[i, ~artifact_indices]
-        mean_clean = np.mean(clean_region)  # Mean of clean regions
-        data_to_filter = data_to_filter - np.mean(data_to_filter) + mean_clean  # Adjust artifact region
-        filtered_data[i, artifact_indices] = data_to_filter
-
-    return filtered_data
-
-
-# Function to remove DC offset and apply a custom shift to the baseline drift region only
-def remove_dc_offset(data, shift_value=0.1, baseline_drift_indices=None):
-    """
-    Remove DC offset from data by subtracting the mean value and applying a custom shift to the baseline drift region only.
-
-    :param data: Input data (signal) with shape (n_channels, n_samples)
-    :param shift_value: Value to add to the signal after removing DC offset (controls the shift)
-    :param baseline_drift_indices: Array of boolean values indicating the baseline drift region to shift
-    :return: Data with DC offset removed and the shift applied to the baseline drift region only
-    """
-    # Remove the DC offset (mean value of each channel)
-    data_no_dc = data - np.mean(data, axis=1, keepdims=True)
-
-    # Apply the custom shift only to the baseline drift region
-    if baseline_drift_indices is not None:
-        for i in range(data.shape[0]):  # Iterate through each channel
-            # Apply shift only to the baseline drift region (where baseline_drift_indices is True)
-            data_no_dc[i, baseline_drift_indices[i]] += shift_value
-
-    return data_no_dc
-
-
-# Function to convert raw intensity to optical density
-def optical_density(raw_intensity):
-    """
-    Convert raw intensity to optical density (OD) using Beer-Lambert law.
-    """
-    I0 = np.mean(raw_intensity, axis=1, keepdims=True)  # Baseline intensity (mean over time)
-    return -np.log(raw_intensity / I0)
-
-
-# Define the baseline drift region
-def get_baseline_drift_indices(data_shape):
-    """
-    Define the baseline drift region.
-    :param data_shape: Shape of the data (n_channels, n_samples)
-    :return: Boolean array of the same shape indicating the baseline drift region
-    """
-    n_channels, n_samples = data_shape
-    baseline_drift_indices = np.zeros((n_channels, n_samples), dtype=bool)
-
-    # Define baseline drift region (example: from sample 350 to 550)
-    baseline_drift_indices[:, 350:550] = True
-
-    return baseline_drift_indices
-
-
-# Function to shift the baseline drift region
-def shift_baseline_drift(data, baseline_drift_indices, shift_value):
-    """
-    Shift the baseline drift region of the data by a specified shift value.
-    :param data: Input data (n_channels, n_samples)
-    :param baseline_drift_indices: Boolean array indicating the baseline drift region
-    :param shift_value: The amount by which to shift the baseline drift region
-    :return: Data with shifted baseline drift region
-    """
-    shifted_data = data.copy()
-
-    for i in range(data.shape[0]):  # Iterate through each channel
-        # Apply shift only to the baseline drift region
-        shifted_data[i, baseline_drift_indices[i]] += shift_value
-
-    return shifted_data
-
-
-# Load fNIRS data
+# 读取 fNIRS 数据
 fnirs_data_folder = mne.datasets.fnirs_motor.data_path()
 fnirs_raw_dir = os.path.join(fnirs_data_folder, "Participant-1")
 raw_intensity = mne.io.read_raw_nirx(fnirs_raw_dir).load_data().resample(3, npad="auto")
 
-# Convert to optical density
-raw_od = optical_density(raw_intensity.get_data())
+# 将信号转换为光密度
+raw_od = optical_density(raw_intensity)
 
-# Simulate corrupted data (add baseline drift artifact)
-corrupted_data = raw_od.copy()
-corrupted_data[:, 350:550] += 0.03  # Add baseline drift artifact in new region
+# 添加伪影 (尖峰伪影和基线漂移)
+corrupted_data = raw_od.get_data()
+corrupted_data[:, 298:302] -= 0.06  # 添加尖峰伪影
+corrupted_data[:, 450:750] += 0.03  # 添加基线漂移
 
-# Get baseline drift indices (only the baseline drift region)
-baseline_drift_indices = get_baseline_drift_indices(corrupted_data.shape)
+# 检查数据中的 NaN 或 Inf 值
+if np.any(np.isnan(corrupted_data)) or np.any(np.isinf(corrupted_data)):
+    print("Warning: Corrupted data contains NaN or Inf values.")
+    corrupted_data = np.nan_to_num(corrupted_data)  # 将 NaN 转换为 0，Inf 转换为有限的数值
 
-# Remove DC offset and apply a shift (e.g., shift by 0.3) only to the baseline drift region
-shift_value = -0.01 # Shift the baseline drift region by -0.01
-dc_removed_data = remove_dc_offset(corrupted_data, shift_value=shift_value,
-                                   baseline_drift_indices=baseline_drift_indices)
+# 创建带有伪影的 RawArray
+corrupted_od = mne.io.RawArray(corrupted_data, raw_od.info, first_samp=raw_od.first_samp)
 
-# Shift the baseline drift region (for display in subplot 3)
-shifted_data = shift_baseline_drift(dc_removed_data, baseline_drift_indices, shift_value)
+# 改进的 MDF 函数
+def multivariate_disturbance_filtering_improved(corrupted_data, order=(5, 5)):
+    """
+    改进版多变量扰动滤波器 (MDF)，增强对基线漂移的校正。
+    """
+    n_channels, n_samples = corrupted_data.shape
+    filtered_data = np.zeros_like(corrupted_data)
 
-# Apply Multivariate Disturbance Filtering (MDF)
-filtered_data = multivariate_disturbance_filtering(shifted_data)
+    for i in range(n_channels):
+        y = corrupted_data[i]
 
-# Set consistent y-axis limits for plotting
-y_min = min(np.min(raw_od[0, :]), np.min(corrupted_data[0, :]), np.min(filtered_data[0, :]))
-y_max = max(np.max(raw_od[0, :]), np.max(corrupted_data[0, :]), np.max(filtered_data[0, :]))
+        # 数据归一化，避免标准差为零
+        y_mean = np.mean(y)
+        y_std = np.std(y)
+        if y_std == 0:  # 防止标准差为零
+            y_normalized = y - y_mean
+        else:
+            y_normalized = (y - y_mean) / y_std
 
-# Time axis for plotting
-fs = raw_intensity.info['sfreq']  # Sampling frequency
-time_axis = np.arange(raw_od.shape[1]) / fs
+        # 基线漂移估计（低频分量）
+        baseline_drift = gaussian_filter1d(y_normalized, sigma=50)  # 提取低频分量
+        y_detrended = y_normalized - baseline_drift  # 移除基线漂移
 
-# 记录程序结束的时间
-end_time = time.time()
+        # 初始化参数
+        params_init = np.random.uniform(-0.05, 0.05, order[0] + order[1])  # 缩小初始参数范围
 
-# 计算并输出程序运行时间
-elapsed_time = end_time - start_time
-print(f"程序运行时间: {elapsed_time} 秒")
+        # 优化 ARMA 参数
+        try:
+            result = minimize(
+                log_likelihood, params_init, args=(y_detrended, order, 0.01),
+                method="L-BFGS-B",
+                bounds=[(-0.9, 0.9)] * len(params_init),
+                options={"disp": False, "maxiter": 500}
+            )
 
-# Plot raw, corrupted, and filtered data
-plt.figure(figsize=(12, 10))
+            if not result.success:
+                print(f"Channel {i}: Optimization failed. Using original data.")
+                filtered_data[i] = y  # 未滤波
+                continue
 
-# Raw data (Original Signal)
-plt.subplot(3, 1, 1)
-plt.plot(time_axis, raw_od[0, :], label="Raw Data", color='blue', linewidth=1.5)
-plt.title("Raw fNIRS Data")
-plt.xlabel("Time (seconds)")
-plt.ylabel("Optical Density (OD)")
-plt.legend()
-plt.xlim([time_axis[0], time_axis[-1]])
-plt.ylim([y_min, y_max])
+            params_opt = result.x
+            a = np.r_[1, -params_opt[:order[0]]]
+            b = np.r_[1, params_opt[order[0]:]]
 
-# Corrupted data with baseline drift artifact (before shift)
-plt.subplot(3, 1, 2)
-plt.plot(time_axis, corrupted_data[0, :], label="Corrupted Data (with baseline drift)", color='red', linewidth=1.5)
-plt.axvspan(time_axis[350], time_axis[550], color='yellow', alpha=0.3, label="Baseline Drift")
-plt.title("Corrupted fNIRS Data (with baseline drift)")
-plt.xlabel("Time (seconds)")
-plt.ylabel("Optical Density (OD)")
-plt.legend()
-plt.xlim([time_axis[0], time_axis[-1]])
-plt.ylim([y_min, y_max])
+            # 滤波并还原归一化数据
+            filtered_normalized = lfilter(b, a, y_detrended)
+            filtered_data[i] = filtered_normalized * y_std + y_mean + baseline_drift * y_std
 
-# Shifted data (after baseline drift shift)
-plt.subplot(3, 1, 3)
-plt.plot(time_axis, shifted_data[0, :], label="Shifted Data (Baseline Drift Shift)", color='purple', linewidth=1.5)
-plt.title("Filtered fNIRS Data (After Baseline Drift Shift)")
-plt.xlabel("Time (seconds)")
-plt.ylabel("Optical Density (OD)")
-plt.legend()
-plt.xlim([time_axis[0], time_axis[-1]])
-plt.ylim([y_min, y_max])
+            # 后处理 - 高斯平滑
+            filtered_data[i] = gaussian_filter1d(filtered_data[i], sigma=3)
 
-plt.tight_layout()
-plt.savefig("fnirs_denoising_mdf_baseline_shift_changes_final.png")
-plt.show()
+        except Exception as ex:
+            print(f"Channel {i}: Exception occurred: {ex}")
+            filtered_data[i] = y
+
+    return filtered_data
+
+# 对数似然函数
+def log_likelihood(params, y, order, regularization_weight=0.01):
+    """
+    对数似然函数，用于优化 ARMA 模型参数。
+    """
+    p, q = order
+    a = np.r_[1, -params[:p]]  # AR 系数
+    b = np.r_[1, params[p:p + q]]  # MA 系数
+
+    # 检查滤波器稳定性
+    if np.any(np.abs(np.roots(a)) >= 0.95) or np.any(np.abs(np.roots(b)) >= 0.95):
+        return np.inf  # 滤波器不稳定
+
+    # 计算残差
+    e = lfilter(b, a, y)  # 滤波后的残差
+
+    # 检查数值有效性
+    if np.any(np.isnan(e)) or np.any(np.isinf(e)):
+        print(f"Invalid value encountered in residuals: {e}")  # 输出出错数据
+        return np.inf
+
+    # 对数似然
+    ll = -0.5 * len(e) * np.log(2 * np.pi) - 0.5 * np.sum(e ** 2)
+    reg = regularization_weight * np.sum(params ** 2)  # 加入正则化项
+    return -(ll - reg)  # 返回负对数似然（供优化器最小化）
+
+# 应用改进的 MDF 滤波
+filtered_data_improved = multivariate_disturbance_filtering_improved(corrupted_data, order=(5, 5))
+
+# 计算 CNR, SNR 和 MSE
+def calculate_metrics(original_data, corrupted_data, filtered_data):
+    """
+    计算信号的 CNR, SNR 和 MSE。
+    """
+    mse = np.mean((original_data - filtered_data) ** 2)
+    signal_power = np.mean(original_data ** 2)
+    noise_power = np.mean((original_data - filtered_data) ** 2)
+    snr = 10 * np.log10(signal_power / noise_power)
+
+    # 计算 CNR（对每个通道单独计算后求均值）
+    cnr_values = []
+    for i in range(original_data.shape[0]):
+        signal_range = np.ptp(original_data[i])
+        noise_range = np.ptp(original_data[i] - filtered_data[i])
+        cnr = 10 * np.log10(signal_range / noise_range) if noise_range > 0 else np.inf
+        cnr_values.append(cnr)
+
+    cnr = np.mean(cnr_values)
+    return cnr, snr, mse
+
+# 计算并打印指标
+cnr, snr, mse = calculate_metrics(raw_od.get_data(), corrupted_data, filtered_data_improved)
+print(f"CNR: {cnr:.2f} dB")
+print(f"SNR: {snr:.2f} dB")
+print(f"MSE: {mse:.6f}")
+
+# 绘图函数
+# 绘图函数
+def plot_separate(raw_data, corrupted_data, filtered_data, channel_idx=0):
+    """
+    分别绘制原始信号、伪影信号和滤波后的信号。
+    """
+    fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+
+    # 原始信号
+    axes[0].plot(raw_data[channel_idx], label="Original Signal", color="blue", alpha=0.7)
+    axes[0].set_title(f"Channel {channel_idx + 1} - Original Signal")
+    axes[0].set_ylabel("Amplitude")
+    axes[0].legend(loc="upper right")
+
+    # 加噪声的信号
+    axes[1].plot(corrupted_data[channel_idx], label="Corrupted Signal", color="orange", alpha=0.7)
+    axes[1].set_title(f"Channel {channel_idx + 1} - Corrupted Signal")
+    axes[1].set_ylabel("Amplitude")
+    axes[1].legend(loc="upper right")
+
+    # 去噪后的信号
+    axes[2].plot(filtered_data[channel_idx], label="Filtered Signal (Improved MDF)", color="green", alpha=0.7)
+    axes[2].set_title(f"Channel {channel_idx + 1} - Filtered Signal")
+    axes[2].set_xlabel("Time (samples)")
+    axes[2].set_ylabel("Amplitude")
+    axes[2].legend(loc="upper right")
+
+    plt.tight_layout()
+    plt.show()
 
 
-# Calculate SNR, SME, and CNR
-
-
-# SNR (Signal-to-Noise Ratio) - Compare the signal power and noise power
-signal_power = np.mean(raw_od ** 2)  # Power of the raw signal
-noise_power = np.mean((corrupted_data - raw_od) ** 2)  # Power of the noise (difference between corrupted and raw signals)
-SNR = 10 * np.log10(signal_power / noise_power)
-
-# SME (Signal-to-Mean Error) - Mean square error between raw and filtered data
-sme = np.mean((raw_od - filtered_data) ** 2)
-
-# CNR (Contrast-to-Noise Ratio) - Contrast between signal and noise
-signal_contrast = np.mean(np.abs(raw_od - corrupted_data))  # Contrast between original and corrupted signal
-CNR = 10 * np.log10(signal_contrast / noise_power)
-
-# Output the metrics
-print(f"SNR (Signal-to-Noise Ratio): {SNR:.2f} dB")
-print(f"SME (Signal-to-Mean Error): {sme:.5f}")
-print(f"CNR (Contrast-to-Noise Ratio): {CNR:.2f} dB")
+# 绘制第 1 个通道的信号
+plot_separate(raw_od.get_data(), corrupted_data, filtered_data_improved, channel_idx=0)
